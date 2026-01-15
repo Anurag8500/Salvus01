@@ -4,7 +4,7 @@ import Beneficiary from '@/models/Beneficiary'
 import Campaign from '@/models/Campaign'
 import Organisation from '@/models/Organisation'
 import Vendor from '@/models/Vendor'
-import Transaction from '@/models/Transaction'
+import PaymentRelease from '@/models/PaymentRelease'
 import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
 import User from '@/models/User'
@@ -33,7 +33,7 @@ export async function GET() {
 
     await dbConnect()
 
-    const beneficiary = await Beneficiary.findOne({ userId: user.userId }).populate('campaignId', 'name location stateRegion district status categories categoryMaxLimits beneficiaryCap createdBy')
+    const beneficiary = await Beneficiary.findOne({ userId: user.userId }).populate('campaignId', 'name location stateRegion district status categories categoryMaxLimits beneficiaryCap createdBy escrowAddress')
     if (!beneficiary) {
       return NextResponse.json({ message: 'Not found' }, { status: 404 })
     }
@@ -45,9 +45,7 @@ export async function GET() {
       organisationName = org?.name || ''
     }
 
-    const vendors = await Vendor.find({ campaignId: beneficiary.campaignId, status: 'Approved' }).select('name authorizedCategories')
-
-    const txns = await Transaction.find({ beneficiaryId: beneficiary._id }).sort({ timestamp: -1 }).limit(10).populate('vendorId', 'name')
+    const vendors = await Vendor.find({ campaignId: beneficiary.campaignId, status: 'Approved' }).select('name authorizedCategories walletAddress campaignId')
 
     const categoryLimitsMap: Record<string, number> = {}
     const categories: string[] = Array.isArray(campaign?.categories) ? (campaign!.categories as string[]) : []
@@ -61,12 +59,31 @@ export async function GET() {
 
     const spentByCategory: Record<string, number> = {}
     let totalSpent = 0
-    txns.forEach(t => {
-      const cat = (t as any).category
-      const amt = (t as any).amount || 0
-      spentByCategory[cat] = (spentByCategory[cat] || 0) + amt
-      totalSpent += amt
-    })
+
+    const escrowAddress = campaign?.escrowAddress as string | undefined
+    let recentReleases: any[] = []
+
+    if (escrowAddress && beneficiary.beneficiaryId) {
+      const releases = await PaymentRelease.find({
+        campaignAddress: escrowAddress,
+        beneficiaryId: beneficiary.beneficiaryId
+      }).sort({ timestamp: -1 })
+
+      releases.forEach(r => {
+        const amt = r.amountNumber || 0
+        totalSpent += amt
+        const cat = r.category || ''
+        if (cat) {
+          spentByCategory[cat] = (spentByCategory[cat] || 0) + amt
+        }
+      })
+
+      recentReleases = releases.slice(0, 10)
+    }
+
+    if (typeof totalLimit === 'number' && totalLimit >= 0 && totalSpent > totalLimit) {
+      totalSpent = totalLimit
+    }
 
     const balances = Object.keys(categoryLimitsMap).map(cat => {
       const limit = categoryLimitsMap[cat] || 0
@@ -87,17 +104,34 @@ export async function GET() {
       authorizedCategories: v.authorizedCategories || []
     }))
 
-    const history = txns.map(t => {
-      const date = new Date(t.timestamp)
+    const vendorByAddress: Record<string, string> = {}
+    const releaseVendorAddresses = Array.from(new Set(recentReleases.map(r => (r.vendorAddress || '').toLowerCase()).filter(Boolean)))
+
+    if (releaseVendorAddresses.length > 0) {
+      const vendorDocs = await Vendor.find({
+        walletAddress: { $in: releaseVendorAddresses },
+        campaignId: beneficiary.campaignId
+      }).select('name walletAddress')
+
+      vendorDocs.forEach(v => {
+        if (v.walletAddress) {
+          vendorByAddress[(v.walletAddress as string).toLowerCase()] = v.name
+        }
+      })
+    }
+
+    const history = recentReleases.map(r => {
+      const date = new Date(r.timestamp)
       const day = date.getDate().toString().padStart(2, '0')
       const month = date.toLocaleString('en-US', { month: 'short' })
       const year = date.getFullYear()
+      const addr = (r.vendorAddress || '').toLowerCase()
       return {
-        store: (t as any).vendorId?.name || 'Store',
-        category: (t as any).category,
-        amount: (t as any).amount,
+        store: vendorByAddress[addr] || 'Store',
+        category: r.category || 'Unknown',
+        amount: r.amountNumber,
         date: `${day} ${month} ${year}`,
-        status: (t as any).status || 'Paid'
+        status: 'Paid'
       }
     })
 

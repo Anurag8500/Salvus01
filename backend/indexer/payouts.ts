@@ -49,6 +49,12 @@ const CAMPAIGN_ABI = [
 /* -------------------------------------------------------------------------- */
 
 const lastScannedBlock: Record<string, number> = {};
+const campaignCategoryCache: Record<string, string[]> = {};
+const campaignIdCache: Record<string, string> = {};
+const beneficiaryHashCache: Record<
+  string,
+  Record<string, { beneficiaryId: string; beneficiaryMongoId: mongoose.Types.ObjectId }>
+> = {};
 
 async function main() {
   await connectDB();
@@ -143,17 +149,88 @@ function startBlockWatcher(
           console.warn(`Release with zero donations — skipping attribution for ${txHash}`);
           attributable = false;
         }
-        let decodedCategory = '';
-        try {
-          decodedCategory = category ? ethers.decodeBytes32String(category) : '';
-        } catch {
-          decodedCategory = '';
+
+        // Resolve campaign document and cache id/categories
+        let campaignId = campaignIdCache[escrow];
+        let categories = campaignCategoryCache[escrow];
+        if (!campaignId || !categories) {
+          const campaignDoc = await Campaign.findOne({ escrowAddress: escrow });
+          if (!campaignDoc) {
+            throw new Error(`Campaign not found for escrow ${escrow}`);
+          }
+          campaignId = String(campaignDoc._id);
+          campaignIdCache[escrow] = campaignId;
+          if (Array.isArray((campaignDoc as any).categories)) {
+            categories = (campaignDoc as any).categories as string[];
+          } else {
+            categories = [];
+          }
+          campaignCategoryCache[escrow] = categories;
         }
+
+        // Resolve category hash -> canonical category string
+        let decodedCategory = '';
+        const categoryHashStr = category ? String(category).toLowerCase() : '';
+        if (categoryHashStr) {
+          for (const cat of categories) {
+            const key = String(cat);
+            const hashed = ethers.keccak256(ethers.toUtf8Bytes(key));
+            if (hashed.toLowerCase() === categoryHashStr) {
+              decodedCategory = key;
+              break;
+            }
+          }
+          if (!decodedCategory) {
+            throw new Error(
+              `Unknown category hash ${categoryHashStr} for escrow ${escrow} (campaign ${campaignId})`
+            );
+          }
+        }
+
+        // Resolve beneficiaryHash -> Beneficiary document for this campaign
+        const beneficiaryHashStr = beneficiaryHash
+          ? String(beneficiaryHash).toLowerCase()
+          : '';
+        if (!beneficiaryHashStr) {
+          throw new Error(`Empty beneficiaryHash in PaymentReleased for tx ${txHash}`);
+        }
+
+        let campaignBeneficiaries = beneficiaryHashCache[campaignId];
+        if (!campaignBeneficiaries) {
+          const BeneficiaryModel = (await import("../../models/Beneficiary")).default;
+          const beneficiaries = await BeneficiaryModel.find({
+            campaignId: new mongoose.Types.ObjectId(campaignId)
+          }).select("beneficiaryId");
+          const map: Record<
+            string,
+            { beneficiaryId: string; beneficiaryMongoId: mongoose.Types.ObjectId }
+          > = {};
+          for (const b of beneficiaries) {
+            const benId = (b as any).beneficiaryId as string;
+            if (!benId) continue;
+            const h = ethers.keccak256(ethers.toUtf8Bytes(benId));
+            map[h.toLowerCase()] = {
+              beneficiaryId: benId,
+              beneficiaryMongoId: b._id as mongoose.Types.ObjectId
+            };
+          }
+          campaignBeneficiaries = map;
+          beneficiaryHashCache[campaignId] = campaignBeneficiaries;
+        }
+
+        const beneficiaryMapping = campaignBeneficiaries[beneficiaryHashStr];
+        if (!beneficiaryMapping) {
+          throw new Error(
+            `Unknown beneficiary for hash ${beneficiaryHashStr} in campaign ${campaignId}`
+          );
+        }
+
         await PaymentRelease.create({
           campaignAddress: escrow,
           requestId: requestHash,
           vendorAddress: vendor,
-          beneficiaryId: beneficiaryHash,
+          beneficiaryId: beneficiaryMapping.beneficiaryId,
+          beneficiaryMongoId: beneficiaryMapping.beneficiaryMongoId,
           category: decodedCategory,
           amountNumber: Number(amountVal),
           timestamp,

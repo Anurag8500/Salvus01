@@ -4,7 +4,8 @@ const PaymentReleaseSchema = new Schema({
   campaignAddress: { type: String, required: true, index: true },
   requestId: { type: String, required: true },
   vendorAddress: { type: String, required: true },
-  beneficiaryId: { type: String }, // hashed if needed
+  beneficiaryId: { type: String }, // canonical beneficiary identifier, e.g. "BEN-1234"
+  beneficiaryMongoId: { type: Schema.Types.ObjectId, ref: 'Beneficiary' },
   category: { type: String },
   amountNumber: { type: Number, required: true },
   timestamp: { type: Date, required: true },
