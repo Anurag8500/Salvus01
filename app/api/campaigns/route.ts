@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
 import { ethers } from 'ethers'
 import { SalvusEscrowCampaignABI } from "@/lib/abis/SalvusEscrowCampaign";
-import SalvusEscrowCampaignArtifact from '@/artifacts/contracts/SalvusEscrowCampaign.sol/SalvusEscrowCampaign.json';
+import { SalvusEscrowCampaignArtifact } from '@/lib/contracts/SalvusEscrowCampaign'
 
 // Helper to get user from token
 async function getUser() {
