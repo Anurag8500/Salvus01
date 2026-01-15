@@ -11,7 +11,6 @@ const CampaignRequestSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
   },
   organizationName: { type: String, required: true },
   organizationType: { type: String, required: true },
