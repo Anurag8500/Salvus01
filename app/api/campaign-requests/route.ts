@@ -50,10 +50,6 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const user = await getUser()
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    }
 
     const form = await req.formData()
     const formData = form as any;
@@ -88,7 +84,6 @@ export async function POST(req: Request) {
 
     await dbConnect()
     const created = await CampaignRequest.create({
-      createdBy: user.userId,
       organizationName,
       organizationType,
       contactPerson,
