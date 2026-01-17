@@ -22,6 +22,19 @@ const InventoryItemSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 0,
+    comment: 'LEGACY: USDC price (DO NOT use for UI)',
+  },
+  priceInr: {
+    type: Number,
+    required: true,
+  },
+  priceUsdc: {
+    type: Number,
+    required: true,
+  },
+  fxRateUsed: {
+    type: Number,
+    required: true,
   },
   description: {
     type: String,

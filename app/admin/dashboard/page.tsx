@@ -96,10 +96,10 @@ export default function AdminDashboard() {
       setActionItems(data.actionItems)
 
       // 4. Recent Activity
-      setRecentPayments(data.recentActivity.payments.map((p: any) => ({
+      setRecentPayments((data.recentActivity.payments || []).map((p: any) => ({
         id: p._id,
-        title: `${p.amount} USDC to ${p.vendorId?.name || 'Unknown'}`,
-        subtitle: `${p.category} - ${p.campaignId?.name || 'General'}`,
+        title: `${(p.amountNumber || 0).toLocaleString()} USDC to ${p.vendorName || 'Vendor'}`,
+        subtitle: `${p.category || 'General'} • ${p.campaignName || 'Campaign'}`,
         timestamp: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         icon: CreditCard,
         type: 'payment'

@@ -2,14 +2,14 @@ import { ethers } from 'ethers';
 import { SalvusEscrowCampaignABI } from "@/lib/abis/SalvusEscrowCampaign";
 
 const BACKEND_PRIVATE_KEY = process.env.BACKEND_PRIVATE_KEY;
-const RPC_URL = process.env.RPC_URL_AMOY;
+const RPC_URL = process.env.RPC_URL;
 
 if (!BACKEND_PRIVATE_KEY) {
     throw new Error("Missing BACKEND_PRIVATE_KEY in environment variables");
 }
 
 if (!RPC_URL) {
-    throw new Error("Missing RPC_URL_AMOY in environment variables");
+    throw new Error("Missing RPC_URL in environment variables");
 }
 
 export const getProvider = () => {
@@ -111,6 +111,13 @@ export const releasePaymentOnChain = async (
         amountUnits,
         proofHash
     );
+
+    if (!tx || !tx.hash) {
+        throw new Error('Blockchain txHash missing after payment execution');
+    }
+
     await tx.wait();
     console.log(`Payment released. Tx: ${tx.hash}`);
+
+    return tx.hash as string;
 };

@@ -15,13 +15,29 @@ import PaymentRelease from "../../models/PaymentRelease";
 const CampaignSchema = new mongoose.Schema(
   {
     escrowAddress: { type: String },
-    status: { type: String }
+    status: { type: String },
+    deploymentTx: { type: String }
   },
   { strict: false }
 );
 
 const Campaign =
   mongoose.models.Campaign || mongoose.model("Campaign", CampaignSchema);
+
+const IndexerStateSchema = new mongoose.Schema(
+  {
+    escrowAddress: { type: String, required: true },
+    indexerType: { type: String, required: true },
+    lastScannedBlock: { type: Number, required: true }
+  },
+  { strict: false }
+);
+
+IndexerStateSchema.index({ escrowAddress: 1, indexerType: 1 }, { unique: true });
+
+const IndexerState =
+  mongoose.models.IndexerState ||
+  mongoose.model("IndexerState", IndexerStateSchema);
 
 /* -------------------------------------------------------------------------- */
 /*                               DB CONNECTION                                */
@@ -49,6 +65,9 @@ const CAMPAIGN_ABI = [
 /* -------------------------------------------------------------------------- */
 
 const lastScannedBlock: Record<string, number> = {};
+const isScanning: Record<string, boolean> = {};
+const watcherStarted: Record<string, boolean> = {};
+const MAX_BLOCKS = 2000;
 const campaignCategoryCache: Record<string, string[]> = {};
 const campaignIdCache: Record<string, string> = {};
 const beneficiaryHashCache: Record<
@@ -59,15 +78,12 @@ const beneficiaryHashCache: Record<
 async function main() {
   await connectDB();
 
-  if (!process.env.WS_RPC_URL_AMOY) {
-    throw new Error("Missing WS_RPC_URL_AMOY in environment variables");
+  if (!process.env.WS_RPC_URL) {
+    throw new Error("Missing WS_RPC_URL in environment variables");
   }
 
-  const provider = new ethers.WebSocketProvider(process.env.WS_RPC_URL_AMOY);
-
-  console.log("Payout Indexer started (Amoy, live-only)");
-
-  const watchedEscrows = new Set<string>();
+  const provider = new ethers.WebSocketProvider(process.env.WS_RPC_URL);
+  console.log("Payout Indexer started (localhost, live-only)");
 
   setInterval(async () => {
     try {
@@ -78,16 +94,41 @@ async function main() {
 
       for (const camp of campaigns) {
         const escrow = camp.escrowAddress;
-        if (!escrow || watchedEscrows.has(escrow)) continue;
+        if (!escrow || watcherStarted[escrow]) continue;
 
-        console.log(`Watching campaign (payouts): ${camp.name || "Unnamed"} (${escrow})`);
+        console.log(
+          `Watching campaign (payouts): ${camp.name || "Unnamed"} (${escrow})`
+        );
+        // Persistent indexing state ensures we can resume after restarts without losing events.
+        const indexerType = "payouts";
+        let state = await IndexerState.findOne({ escrowAddress: escrow, indexerType });
+        if (!state) {
+          let startBlock = 0;
+          if ((camp as any).deploymentTx) {
+            const receipt = await provider.getTransactionReceipt(
+              (camp as any).deploymentTx as string
+            );
+            if (receipt && receipt.blockNumber != null) {
+              startBlock = Math.max(0, Number(receipt.blockNumber) - 1);
+            } else {
+              const currentBlock = await provider.getBlockNumber();
+              startBlock = currentBlock;
+            }
+          } else {
+            const currentBlock = await provider.getBlockNumber();
+            startBlock = currentBlock;
+          }
+          state = await IndexerState.create({
+            escrowAddress: escrow,
+            indexerType,
+            lastScannedBlock: startBlock
+          });
+        }
 
-        // 👉 START FROM LATEST BLOCK (NO BACKFILL)
-        const latestBlock = await provider.getBlockNumber();
-        lastScannedBlock[escrow] = latestBlock;
+        lastScannedBlock[escrow] = state.lastScannedBlock;
 
         startBlockWatcher(escrow, provider);
-        watchedEscrows.add(escrow);
+        watcherStarted[escrow] = true;
       }
     } catch (err) {
       console.error("Error polling campaigns:", err);
@@ -105,15 +146,25 @@ function startBlockWatcher(
 ) {
   const contract = new ethers.Contract(escrow, CAMPAIGN_ABI, provider);
 
-  provider.on("block", async (currentBlock) => {
+  // NOTE: Polling-based block scanning is used instead of provider.on("block")
+  // because WebSocket subscriptions can silently drop in long-running processes.
+  setInterval(async () => {
+    if (isScanning[escrow]) return;
+    isScanning[escrow] = true;
+
     try {
-      const lastBlock = lastScannedBlock[escrow];
-      if (currentBlock <= lastBlock) return;
+      const lastBlock = lastScannedBlock[escrow] ?? 0;
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = lastBlock + 1;
+      const toBlock = currentBlock;
+      if (toBlock < fromBlock) return;
+
+      const effectiveToBlock = Math.min(toBlock, fromBlock + MAX_BLOCKS);
 
       const events = await contract.queryFilter(
         "PaymentReleased",
-        lastBlock + 1,
-        currentBlock
+        fromBlock,
+        effectiveToBlock
       );
 
       for (const event of events) {
@@ -140,7 +191,6 @@ function startBlockWatcher(
           ? new Date(Number(block.timestamp) * 1000)
           : new Date();
 
-        // Compute totalCampaignDonationsAtRelease (snapshot)
         const Donation = (await import("../../models/Donation")).default;
         const donations = await Donation.find({ campaignAddress: escrow, timestamp: { $lte: timestamp } });
         const totalCampaignDonationsAtRelease = donations.reduce((sum: number, d: any) => sum + (d.amountNumber || 0), 0);
@@ -150,7 +200,6 @@ function startBlockWatcher(
           attributable = false;
         }
 
-        // Resolve campaign document and cache id/categories
         let campaignId = campaignIdCache[escrow];
         let categories = campaignCategoryCache[escrow];
         if (!campaignId || !categories) {
@@ -168,7 +217,6 @@ function startBlockWatcher(
           campaignCategoryCache[escrow] = categories;
         }
 
-        // Resolve category hash -> canonical category string
         let decodedCategory = '';
         const categoryHashStr = category ? String(category).toLowerCase() : '';
         if (categoryHashStr) {
@@ -187,7 +235,6 @@ function startBlockWatcher(
           }
         }
 
-        // Resolve beneficiaryHash -> Beneficiary document for this campaign
         const beneficiaryHashStr = beneficiaryHash
           ? String(beneficiaryHash).toLowerCase()
           : '';
@@ -241,11 +288,18 @@ function startBlockWatcher(
         console.log("PaymentRelease indexed:", txHash);
       }
 
-      lastScannedBlock[escrow] = currentBlock;
+      lastScannedBlock[escrow] = effectiveToBlock;
+      await IndexerState.findOneAndUpdate(
+        { escrowAddress: escrow, indexerType: "payouts" },
+        { lastScannedBlock: effectiveToBlock },
+        { upsert: true }
+      );
     } catch (err) {
       console.error("Payout block scan error:", err);
+    } finally {
+      isScanning[escrow] = false;
     }
-  });
+  }, 3000);
 }
 
 /* -------------------------------------------------------------------------- */

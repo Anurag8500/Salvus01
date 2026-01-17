@@ -67,7 +67,7 @@ export default function DonationHistory() {
                   </div>
                   <div className="flex items-center gap-4">
                     <a
-                      href={`https://amoy.polygonscan.com/tx/${donation.txHash}`}
+                      href={donation.txHash ? `#${donation.txHash}` : '#'}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 px-4 py-2 bg-accent/10 hover:bg-accent/20 border border-accent/30 hover:border-accent/50 text-accent rounded-lg transition-all duration-300 text-sm font-semibold"

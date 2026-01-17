@@ -138,7 +138,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onAdd, all
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Price (USDC)</label>
+                                    <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Price (INR)</label>
                                     <input
                                         type="number"
                                         name="price"

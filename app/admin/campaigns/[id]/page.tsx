@@ -40,7 +40,6 @@ export default function CampaignDetails() {
 
             setCampaign({
                 ...data,
-                funds: `${(data.totalFundsAllocated || 0).toLocaleString()} USDC`, // Format currency
                 stats: data.stats
             })
 
@@ -148,8 +147,26 @@ export default function CampaignDetails() {
                         </div>
 
                         <div className="flex flex-col items-end gap-2">
-                            <div className="text-sm text-gray-400">Total Funds Allocated</div>
-                            <div className="text-3xl font-mono font-bold text-accent">{campaign.funds}</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-right">
+                                    <div className="text-xs text-gray-400">Funds Remaining in Escrow</div>
+                                    <div className="text-lg font-mono font-bold text-accent">
+                                        {campaign.stats?.fundsRemaining?.toLocaleString()} USDC
+                                    </div>
+                                </div>
+                                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-right">
+                                    <div className="text-xs text-gray-400">Funds Raised from Donors</div>
+                                    <div className="text-lg font-mono font-bold text-accent">
+                                        {campaign.stats?.fundsRaised?.toLocaleString()} USDC
+                                    </div>
+                                </div>
+                                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-right">
+                                    <div className="text-xs text-gray-400">Campaign Cap</div>
+                                    <div className="text-lg font-mono font-bold text-accent">
+                                        {campaign.stats?.campaignCap?.toLocaleString()} USDC
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </motion.div>

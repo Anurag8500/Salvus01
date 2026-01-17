@@ -8,6 +8,7 @@ import PaymentRelease from '@/models/PaymentRelease'
 import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
 import User from '@/models/User'
+import { FX_USDC_TO_INR } from '@/lib/fx-config'
 
 // Helper to get user from token
 async function getUser() {
@@ -55,7 +56,9 @@ export async function GET() {
       })
     }
 
-    const totalLimit = campaign?.beneficiaryCap || 0
+    const totalLimit = Math.round(
+      (campaign?.beneficiaryCap || 0) * FX_USDC_TO_INR
+    )
 
     const spentByCategory: Record<string, number> = {}
     let totalSpent = 0
@@ -70,7 +73,7 @@ export async function GET() {
       }).sort({ timestamp: -1 })
 
       releases.forEach(r => {
-        const amt = r.amountNumber || 0
+        const amt = Math.round((r.amountNumber || 0) * FX_USDC_TO_INR)
         totalSpent += amt
         const cat = r.category || ''
         if (cat) {
@@ -86,7 +89,7 @@ export async function GET() {
     }
 
     const balances = Object.keys(categoryLimitsMap).map(cat => {
-      const limit = categoryLimitsMap[cat] || 0
+      const limit = Math.round((categoryLimitsMap[cat] || 0) * FX_USDC_TO_INR)
       const spent = spentByCategory[cat] || 0
       const remaining = Math.max(0, limit - spent)
       return { label: cat, remaining, limit }
@@ -129,7 +132,7 @@ export async function GET() {
       return {
         store: vendorByAddress[addr] || 'Store',
         category: r.category || 'Unknown',
-        amount: r.amountNumber,
+        amount: Math.round((r.amountNumber || 0) * FX_USDC_TO_INR),
         date: `${day} ${month} ${year}`,
         status: 'Paid'
       }

@@ -20,6 +20,14 @@ const TransactionSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  amountInr: {
+    type: Number,
+    required: false,
+  },
+  fxRateUsed: {
+    type: Number,
+    required: false,
+  },
   category: {
     type: String,
     required: true,

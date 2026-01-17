@@ -6,12 +6,11 @@ import "dotenv/config";
 const config: HardhatUserConfig = {
   solidity: "0.8.28",
   networks: {
-    amoy: {
-      url: process.env.RPC_URL_AMOY || "https://rpc-amoy.polygon.technology",
-      chainId: 80002,
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-    },
     hardhat: {
+      chainId: 31337,
+    },
+    localhost: {
+      url: process.env.RPC_URL || "http://127.0.0.1:8545",
       chainId: 31337,
     },
   },

@@ -53,10 +53,10 @@ async function connectDB() {
 /* -------------------------------------------------------------------------- */
 
 const BACKEND_PRIVATE_KEY = process.env.BACKEND_PRIVATE_KEY;
-const RPC_URL = process.env.RPC_URL_AMOY;
+const RPC_URL = process.env.RPC_URL;
 
 if (!BACKEND_PRIVATE_KEY || !RPC_URL) {
-    throw new Error("Missing BACKEND_PRIVATE_KEY or RPC_URL_AMOY env vars");
+    throw new Error("Missing BACKEND_PRIVATE_KEY or RPC_URL env vars");
 }
 
 

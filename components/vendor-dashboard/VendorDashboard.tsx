@@ -104,7 +104,7 @@ const VendorDashboard = () => {
                     <EnhancedStatCard
                         icon={DollarSign}
                         label="Payments Received"
-                        value={`${(stats.paymentsReceived || 0).toLocaleString()} USDC`}
+                        value={`₹${(stats.paymentsReceived || 0).toLocaleString()}`}
                         color="text-purple-400"
                         bgColor="bg-purple-400/10"
                         borderColor="border-purple-400/20"
@@ -112,15 +112,14 @@ const VendorDashboard = () => {
                     />
                 </div>
 
-                <div className="grid lg:grid-cols-3 gap-8">
+                <div className="grid lg:grid-cols-3 gap-8 items-start">
                     <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.4 }}
-                        className="lg:col-span-2 space-y-8"
+                        className="lg:col-span-2"
                     >
                         <InventoryManagement allowedCategories={vendor?.allowedCategories || []} />
-                        <TransactionHistory transactions={transactions} />
                     </motion.div>
 
                     <div className="lg:col-span-1">
@@ -158,6 +157,8 @@ const VendorDashboard = () => {
                         </div>
                     </div>
                 </div>
+
+                <TransactionHistory transactions={transactions} />
             </div>
         </div>
     );

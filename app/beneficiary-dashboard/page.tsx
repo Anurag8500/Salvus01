@@ -275,8 +275,8 @@ export default function BeneficiaryDashboard() {
             <div className="md:text-right">
               <div className="text-xs text-accent mb-1 uppercase tracking-wider font-bold">Available Limit</div>
               <div className="text-3xl font-black text-white">
-                <span className="text-accent">{(totalLimit - totalSpent).toLocaleString()} USDC</span>
-                <span className="text-gray-500 text-lg font-medium ml-1">/ {totalLimit.toLocaleString()} USDC</span>
+                <span className="text-accent">₹{(totalLimit - totalSpent).toLocaleString()}</span>
+                <span className="text-gray-500 text-lg font-medium ml-1">/ ₹{totalLimit.toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -316,11 +316,10 @@ export default function BeneficiaryDashboard() {
                     return (
                       <div key={b.label} className="grid grid-cols-2 max-w-sm items-center py-1">
                         <span className="text-gray-300 font-medium capitalize">{b.label}</span>
-                        <span className="text-right font-mono text-gray-200">
-                          <span className="text-gray-500">{spent.toLocaleString()} USDC</span>
-                          <span className="mx-2 text-gray-600">/</span>
-                          <span>{b.limit.toLocaleString()} USDC</span>
-                        </span>
+                        <div className="text-right">
+                          <div className="text-sm font-bold text-white">₹{b.remaining.toLocaleString()}</div>
+                          <div className="text-xs text-gray-500">of ₹{b.limit.toLocaleString()}</div>
+                        </div>
                       </div>
                     )
                   }) : <div className="text-gray-500">No category limits defined.</div>}
@@ -330,7 +329,7 @@ export default function BeneficiaryDashboard() {
               <div className="mt-8 flex items-start gap-3 p-4 rounded-xl bg-accent/5 border border-accent/10">
                 <span className="text-lg">ℹ️</span>
                 <div className="space-y-1">
-                  <div className="text-gray-200 font-medium">You cannot exceed <span className="text-accent font-bold">{totalLimit.toLocaleString()} USDC</span> in total.</div>
+                  <div className="text-gray-200 font-medium">You cannot exceed <span className="text-accent font-bold">₹{totalLimit.toLocaleString()}</span> in total.</div>
                   <div className="text-sm text-gray-400">Category limits only restrict spending within each category.</div>
                 </div>
               </div>
@@ -444,7 +443,7 @@ export default function BeneficiaryDashboard() {
                         <div key={item._id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
                           <div>
                             <div className="font-medium text-white">{item.name}</div>
-                            <div className="text-sm text-gray-400">{item.price} USDC / {item.unit}</div>
+                            <div className="text-sm text-gray-400">₹{item.price} / {item.unit}</div>
                           </div>
 
                           <div className="flex items-center gap-3 bg-black/30 rounded-lg p-1">
@@ -479,7 +478,7 @@ export default function BeneficiaryDashboard() {
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Amount to Pay</label>
                 <div className="relative">
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-500">USDC</span>
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-500">INR</span>
                   <input
                     type="text"
                     readOnly
@@ -536,7 +535,7 @@ export default function BeneficiaryDashboard() {
                     </div>
                     <div className="flex justify-between items-end">
                       <div className="text-sm text-gray-400">{h.category} • {h.date}</div>
-                      <div className="text-accent font-bold">{h.amount} USDC</div>
+                      <div className="text-accent font-bold">₹{h.amount}</div>
                     </div>
                   </div>
                 ))}

@@ -3,7 +3,8 @@ import dbConnect from '@/lib/mongodb'
 import Campaign from '@/models/Campaign'
 import Beneficiary from '@/models/Beneficiary'
 import Vendor from '@/models/Vendor'
-import Transaction from '@/models/Transaction'
+import Donation from '@/models/Donation'
+import PaymentRelease from '@/models/PaymentRelease'
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -15,31 +16,50 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return NextResponse.json({ message: 'Campaign not found' }, { status: 404 })
     }
 
-    // Aggregations
     const beneficiaryCount = await Beneficiary.countDocuments({ campaignId: id })
     const vendorCount = await Vendor.countDocuments({ campaignId: id })
-    
-    // Fetch Lists (Limit to 50 for now)
+
     const beneficiariesList = await Beneficiary.find({ campaignId: id }).sort({ createdAt: -1 }).limit(50)
     const vendorsList = await Vendor.find({ campaignId: id }).sort({ createdAt: -1 }).limit(50)
 
-    // Calculate spent funds
-    const spentAggregation = await Transaction.aggregate([
-      { $match: { campaignId: campaign._id, status: 'Completed' } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ])
-    const fundsSpent = spentAggregation[0]?.total || 0
+    const escrowAddress = campaign.escrowAddress
 
-    return NextResponse.json({
-      ...campaign.toObject(),
-      stats: {
-        beneficiaries: beneficiaryCount,
-        vendors: vendorCount,
-        fundsSpent
+    let totalDonations = 0
+    let totalPayouts = 0
+
+    if (escrowAddress) {
+      const donationAgg = await Donation.aggregate([
+        { $match: { campaignAddress: escrowAddress } },
+        { $group: { _id: null, total: { $sum: '$amountNumber' } } }
+      ])
+      totalDonations = donationAgg[0]?.total || 0
+
+      const payoutAgg = await PaymentRelease.aggregate([
+        { $match: { campaignAddress: escrowAddress } },
+        { $group: { _id: null, total: { $sum: '$amountNumber' } } }
+      ])
+      totalPayouts = payoutAgg[0]?.total || 0
+    }
+
+    const fundsRaised = totalDonations
+    const fundsRemaining = totalDonations - totalPayouts
+    const campaignCap = campaign.totalFundsAllocated || 0
+
+    return NextResponse.json(
+      {
+        ...campaign.toObject(),
+        stats: {
+          beneficiaries: beneficiaryCount,
+          vendors: vendorCount,
+          fundsRaised,
+          fundsRemaining,
+          campaignCap
+        },
+        beneficiaries: beneficiariesList,
+        vendors: vendorsList
       },
-      beneficiaries: beneficiariesList,
-      vendors: vendorsList
-    }, { status: 200 })
+      { status: 200 }
+    )
 
   } catch (error) {
     console.error('Campaign Detail GET Error:', error)

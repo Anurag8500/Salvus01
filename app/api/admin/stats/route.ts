@@ -3,7 +3,8 @@ import dbConnect from '@/lib/mongodb'
 import Campaign from '@/models/Campaign'
 import Beneficiary from '@/models/Beneficiary'
 import Vendor from '@/models/Vendor'
-import Transaction from '@/models/Transaction'
+import Donation from '@/models/Donation'
+import PaymentRelease from '@/models/PaymentRelease'
 import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
 import mongoose from 'mongoose'
@@ -59,7 +60,7 @@ export async function GET() {
     const highRiskVendors = await Vendor.countDocuments({ riskLevel: 'High', createdBy: userId })
     const totalAlerts = highRiskBeneficiaries + highRiskVendors
 
-    // 5. Recent Activity
+    // 5. Recent Activity (campaigns list)
     const recentCampaigns = await Campaign.find({ createdBy: userId }).sort({ createdAt: -1 }).limit(5)
     
     // 6. Campaigns with detailed stats (for the table)
@@ -100,28 +101,162 @@ export async function GET() {
       { $sort: { createdAt: -1 } }
     ])
 
-    // Get user's campaign IDs for transaction filtering
-    const userCampaignIds = await Campaign.find({ createdBy: userId }).distinct('_id')
+    // Get user's campaigns and escrow addresses for activity filtering
+    const userCampaigns = await Campaign.find({ createdBy: userId }).select('_id escrowAddress name')
+    const userCampaignIds = userCampaigns.map((c) => c._id)
+    const campaignAddresses = userCampaigns
+      .map((c) => c.escrowAddress)
+      .filter((addr): addr is string => !!addr)
 
-    // 7. Recent Transactions/Activity
-    const recentTransactions = await Transaction.find({ campaignId: { $in: userCampaignIds } })
-      .sort({ timestamp: -1 })
+    // 7. Recent payments from indexed PaymentRelease (indexer-derived on-chain payouts)
+    // NOTE: PaymentRelease is the source of truth for vendor payouts.
+    let recentPayments: any[] = []
+    if (campaignAddresses.length > 0) {
+      const rawPayments = await PaymentRelease.find({
+        campaignAddress: { $in: campaignAddresses }
+      })
+        .sort({ timestamp: -1 })
+        .limit(5)
+        .select('amountNumber category vendorAddress campaignAddress timestamp')
+        .lean()
+
+      const vendorAddresses = Array.from(
+        new Set(
+          rawPayments
+            .map((p) => (p.vendorAddress || '').toLowerCase())
+            .filter((addr) => !!addr)
+        )
+      )
+
+      const vendors = await Vendor.find({
+        walletAddress: { $in: vendorAddresses }
+      })
+        .select('walletAddress name')
+        .lean()
+
+      const vendorNameByAddress = new Map<string, string>()
+      for (const v of vendors) {
+        if (v.walletAddress) {
+          vendorNameByAddress.set(v.walletAddress.toLowerCase(), v.name)
+        }
+      }
+
+      const campaignNameByAddress = new Map<string, string>()
+      for (const c of userCampaigns) {
+        if (c.escrowAddress) {
+          campaignNameByAddress.set(c.escrowAddress.toLowerCase(), c.name)
+        }
+      }
+
+      recentPayments = rawPayments.map((p) => {
+        const vendorName =
+          p.vendorAddress && typeof p.vendorAddress === 'string'
+            ? vendorNameByAddress.get(p.vendorAddress.toLowerCase())
+            : undefined
+        const campaignName =
+          p.campaignAddress && typeof p.campaignAddress === 'string'
+            ? campaignNameByAddress.get(p.campaignAddress.toLowerCase())
+            : undefined
+
+        const { vendorAddress, ...rest } = p as any
+
+        return {
+          ...rest,
+          vendorName,
+          campaignName
+        }
+      })
+    }
+
+    const recentBeneficiaries = await Beneficiary.find({ createdBy: userId, status: 'Approved' })
+      .sort({ updatedAt: -1 })
       .limit(5)
       .populate('campaignId', 'name')
-      .populate('beneficiaryId', 'fullName')
-      .populate('vendorId', 'name')
 
-    const recentBeneficiaries = await Beneficiary.find({ createdBy: userId })
-      .sort({ createdAt: -1 })
+    const recentVendors = await Vendor.find({
+      createdBy: userId,
+      status: { $in: ['Verified', 'Approved'] }
+    })
+      .sort({ updatedAt: -1 })
       .limit(5)
       .populate('campaignId', 'name')
+    
+    // 9. Unified Activity Feed (backend-only aggregation)
+    type ActivityItem = {
+      type: string
+      description: string
+      timestamp: Date
+      relatedId: string
+    }
 
-    const recentVendors = await Vendor.find({ createdBy: userId })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .populate('campaignId', 'name')
+    const activityItems: ActivityItem[] = []
 
-    // 8. Action Items (Derived from pending items)
+    // Donations -> donation made
+    if (campaignAddresses.length > 0) {
+      const recentDonations = await Donation.find({
+        campaignAddress: { $in: campaignAddresses }
+      })
+        .sort({ timestamp: -1 })
+        .limit(10)
+        .lean()
+
+      for (const d of recentDonations) {
+        activityItems.push({
+          type: 'donation',
+          // NOTE: Donation is the source of truth for funds raised from donors.
+          description: `Donation of ${d.amountNumber} USDC`,
+          timestamp: d.timestamp,
+          relatedId: d.campaignAddress
+        })
+      }
+    }
+
+    // PaymentRelease -> vendor payout
+    if (campaignAddresses.length > 0) {
+      const recentPayouts = await PaymentRelease.find({
+        campaignAddress: { $in: campaignAddresses }
+      })
+        .sort({ timestamp: -1 })
+        .limit(10)
+        .lean()
+
+      for (const p of recentPayouts) {
+        activityItems.push({
+          type: 'payout',
+          description: `Payout of ${p.amountNumber} USDC to ${p.vendorAddress}`,
+          timestamp: p.timestamp,
+          relatedId: p.txHash
+        })
+      }
+    }
+
+    // Beneficiary -> beneficiary added
+    for (const b of recentBeneficiaries) {
+      activityItems.push({
+        type: 'beneficiary_added',
+        description: `Beneficiary ${b.fullName} added`,
+        timestamp: b.createdAt,
+        relatedId: b.beneficiaryId || String(b._id)
+      })
+    }
+
+    // Vendor -> vendor approved/verified
+    for (const v of recentVendors) {
+      if (v.status === 'Verified' || v.status === 'Approved') {
+        activityItems.push({
+          type: 'vendor_approved',
+          description: `Vendor ${v.name} approved`,
+          timestamp: v.createdAt,
+          relatedId: v.storeId || String(v._id)
+        })
+      }
+    }
+
+    const activityFeed = activityItems.sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    )
+
+    // 10. Action Items (Derived from pending items)
     const actionItems: any[] = []
     const pendingBens = await Beneficiary.find({ status: 'Pending', createdBy: userId }).limit(3).populate('campaignId', 'name')
     pendingBens.forEach(b => {
@@ -179,11 +314,13 @@ export async function GET() {
     return NextResponse.json({ 
       stats, 
       campaigns: campaignsList,
+      recentPayments,
       recentActivity: {
-        payments: recentTransactions,
+        payments: recentPayments,
         beneficiaries: recentBeneficiaries,
         vendors: recentVendors
       },
+      activityFeed,
       actionItems
     }, { status: 200 })
   } catch (error) {

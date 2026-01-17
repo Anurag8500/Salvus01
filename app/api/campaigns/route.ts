@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     // Create Campaign
     let escrowAddress = "";
     let deploymentTx = "";
-    const chainId = 80002;
+    const chainId = Number(process.env.CHAIN_ID || 31337);
 
     try {
       console.log("Starting contract deployment...");
@@ -97,12 +97,11 @@ export async function POST(req: Request) {
         throw new Error("NEXT_PUBLIC_USDC_ADDRESS is missing");
       }
 
-      // Amoy Deployment
-      if (!process.env.RPC_URL_AMOY || !process.env.PRIVATE_KEY) {
-        throw new Error("Missing RPC_URL_AMOY or PRIVATE_KEY");
+      if (!process.env.RPC_URL || !process.env.PRIVATE_KEY) {
+        throw new Error("Missing RPC_URL or PRIVATE_KEY");
       }
 
-      const provider = new ethers.JsonRpcProvider(process.env.RPC_URL_AMOY);
+      const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
       const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
       const factory = new ethers.ContractFactory(

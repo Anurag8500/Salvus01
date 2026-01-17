@@ -6,8 +6,10 @@ import Vendor from '@/models/Vendor'
 import Transaction from '@/models/Transaction'
 import Campaign from '@/models/Campaign'
 import InventoryItem from '@/models/InventoryItem'
+import Beneficiary from '@/models/Beneficiary'
 import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
+import { FX_USDC_TO_INR } from '@/lib/fx-config'
 
 async function getUser() {
   const cookieStore = cookies()
@@ -63,13 +65,23 @@ export async function GET() {
         .sort({ timestamp: -1 })
         .limit(10)
         .populate('campaignId', 'name')
+        .populate('beneficiaryId', 'beneficiaryId')
     } catch (err) {
       console.error('Vendor Dashboard: Transaction fetch failed', err)
     }
 
-    const paymentsReceived = txns
-      .filter(t => t.status === 'Completed' || t.status === 'Paid')
-      .reduce((sum, t) => sum + (t.amount || 0), 0)
+    const visibleTxns = txns.filter(
+      t => t.status === 'Pending' || t.status === 'Completed' || t.status === 'Paid'
+    )
+
+    const completedTxns = visibleTxns.filter(
+      t => t.status === 'Completed' || t.status === 'Paid'
+    )
+
+    const paymentsReceived = completedTxns.reduce(
+      (sum, t) => sum + (t.amountInr || 0),
+      0
+    )
 
     let itemsCount = 0;
     try {
@@ -104,17 +116,25 @@ export async function GET() {
       },
       stats: {
         itemsListed: itemsCount,
-        totalOrders: txns.length,
+        totalOrders: completedTxns.length,
         paymentsReceived,
       },
-      transactions: txns.map(t => ({
-        id: String(t._id),
-        campaign: (t.campaignId as any)?.name || 'Unknown',
-        amount: t.amount || 0,
-        date: t.timestamp ? new Date(t.timestamp).toLocaleString() : '',
-        status: t.status,
-        category: t.category,
-      })),
+      transactions: visibleTxns.map(t => {
+        const beneficiaryDoc = t.beneficiaryId as any
+        const beneficiaryCode = beneficiaryDoc?.beneficiaryId || 'Unknown'
+
+        return {
+          id: String(t._id),
+          campaign: (t.campaignId as any)?.name || 'Unknown',
+          amountInr: t.amountInr || 0,
+          amountUsdc: t.amount || 0,
+          beneficiaryId: beneficiaryCode,
+          txHash: t.txHash || '',
+          date: t.timestamp ? new Date(t.timestamp).toLocaleString() : '',
+          status: t.status,
+          category: t.category,
+        }
+      }),
     }
 
     return NextResponse.json(response, { status: 200 })

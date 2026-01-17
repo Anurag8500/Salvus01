@@ -18,14 +18,14 @@ async function main() {
   const usdc = await hre.ethers.getContractAt("MockUSDC", usdcAddress);
 
   const recipients = [
-    "0x10f38E821D087165EB3Fab58C3F9a8D1dA6F4fcB", // Donor 1
-    "0x51AE444E962F8f24F90BC405Aa231E8BC6677c55", // Donor 2
+    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", // Donor 1
+    "", // Donor 2
     "", // Donor 3
   ];
 
   const amount = hre.ethers.parseUnits("10000", 6); // 10k USDC each
 
-  console.log("Minting USDC on Polygon Amoy...");
+  console.log("Minting USDC on localhost Hardhat...");
 
   for (const addr of recipients) {
     const tx = await usdc.mint(addr, amount);

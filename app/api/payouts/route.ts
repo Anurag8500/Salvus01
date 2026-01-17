@@ -8,6 +8,8 @@ import InventoryItem from '@/models/InventoryItem'
 import { releasePaymentOnChain } from '@/lib/blockchain'
 import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
+import { FX_USDC_TO_INR } from '@/lib/fx-config'
+import { roundToUsdc } from '@/lib/token-utils'
 
 async function getUser() {
   const cookieStore = cookies()
@@ -74,12 +76,16 @@ export async function POST(req: Request) {
 
       const qty = cart[item._id.toString()] || 0
       if (qty > 0) {
-        totalAmount += item.price * qty
+        const priceUsdc = (item as any).priceUsdc as number
+        const lineTotal = roundToUsdc(priceUsdc * qty)
+        totalAmount += lineTotal
       }
     }
 
-    if (totalAmount <= 0) {
-      return NextResponse.json({ message: 'Invalid total amount' }, { status: 400 })
+    totalAmount = roundToUsdc(totalAmount)
+
+    if (Number.isNaN(totalAmount) || totalAmount <= 0) {
+      return NextResponse.json({ message: 'Invalid USDC amount' }, { status: 400 })
     }
 
     /* ------------------------------------------------------------------ */
@@ -90,6 +96,8 @@ export async function POST(req: Request) {
       beneficiaryId: beneficiary._id,
       vendorId: vendor._id,
       amount: totalAmount,
+      amountInr: Number((totalAmount * FX_USDC_TO_INR).toFixed(2)),
+      fxRateUsed: FX_USDC_TO_INR,
       category,
       status: 'Pending',
     })
@@ -127,8 +135,7 @@ export async function POST(req: Request) {
     } catch (chainError: any) {
       console.error('Blockchain payment failed:', chainError)
 
-      transaction.status = 'Failed'
-      await transaction.save()
+      await Transaction.findByIdAndDelete(transaction._id)
 
       return NextResponse.json(
         { message: chainError.reason || chainError.message || 'Blockchain failure' },

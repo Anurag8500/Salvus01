@@ -4,6 +4,8 @@ import InventoryItem from '@/models/InventoryItem'
 import Vendor from '@/models/Vendor'
 import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
+import { FX_USDC_TO_INR } from '@/lib/fx-config'
+import { roundToUsdc } from '@/lib/token-utils'
 
 async function getUser() {
   const cookieStore = cookies()
@@ -34,7 +36,8 @@ export async function GET() {
       name: i.name,
       category: i.category,
       unit: i.unit,
-      price: i.price,
+      price: i.priceInr,
+      priceUsdc: i.priceUsdc,
       description: i.description,
     }))
     return NextResponse.json({ items: safe }, { status: 200 })
@@ -56,12 +59,19 @@ export async function POST(req: Request) {
     if (!vendor) {
       return NextResponse.json({ message: 'Vendor not found' }, { status: 404 })
     }
+    const priceInr = Number(body.price)
+    const rawUsdc = priceInr / FX_USDC_TO_INR
+    const priceUsdc = roundToUsdc(rawUsdc)
+
     const created = await InventoryItem.create({
       vendorId: vendor._id,
       name: body.name,
       category: body.category,
       unit: body.unit,
-      price: body.price,
+      price: priceUsdc,
+      priceInr: priceInr,
+      priceUsdc: priceUsdc,
+      fxRateUsed: FX_USDC_TO_INR,
       description: body.description || '',
     })
     return NextResponse.json({
@@ -69,7 +79,8 @@ export async function POST(req: Request) {
       name: created.name,
       category: created.category,
       unit: created.unit,
-      price: created.price,
+      price: created.priceInr, // Return INR to frontend
+      priceUsdc: created.priceUsdc,
       description: created.description,
     }, { status: 201 })
   } catch (error: any) {

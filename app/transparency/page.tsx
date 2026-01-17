@@ -1,103 +1,196 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   MapPin, CheckCircle, ArrowRight, Filter, Shield, Building2, Calendar,
   ChevronDown, Search, ArrowDown, Lock, Eye, AlertCircle, Check
 } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 
-// --- Types ---
-type Txn = {
+type CampaignOption = {
   id: string
-  amount: number
-  category: 'Food' | 'Medicine' | 'Transport' | 'Shelter'
-  store: string
-  datetime: string
-  status: 'Paid'
+  name: string
+  location: string
+  status: 'Active' | 'Paused' | 'Closed'
+  description: string
 }
 
-type AuditLog = {
+type CampaignSummary = {
+  id: string
+  name: string
+  description: string
+  status: string
+  location: string
+  totalTxns: number
+  totalSpent: number
+  categories: string[]
+  escrowAddress?: string
+  chainId?: number | null
+  explorerBaseUrl?: string
+}
+
+type LedgerItem = {
+  id: string
+  amount: number
+  currency: string
+  category: string
+  store: string
+  timestamp: string
+  status: 'Paid'
+  txHash: string
+}
+
+type AuditLogItem = {
   action: string
   role: 'Admin' | 'System'
   time: string
   detail: string
 }
 
-type Campaign = {
-  id: string
-  name: string
-  location: string
-  status: 'Active' | 'Closed'
-  description: string
-  stats: {
-    totalTxns: number
-    totalSpent: string
-    categories: string[]
-  }
-}
-
-// --- Mock Data ---
-const CAMPAIGNS: Campaign[] = [
-  {
-    id: 'assam-flood-2025',
-    name: 'Assam Flood Relief 2025',
-    location: 'Assam, India',
-    status: 'Active',
-    description: 'Providing immediate food and shelter to 4 districts affected by Brahmaputra floods.',
-    stats: { totalTxns: 1242, totalSpent: '42.5 L USDC', categories: ['Food', 'Medicine', 'Transport', 'Shelter'] }
-  },
-  {
-    id: 'kerala-2024',
-    name: 'Kerala Recovery Mission',
-    location: 'Kerala, India',
-    status: 'Active',
-    description: 'Rehabilitation support and medical supplies for landslide-affected areas.',
-    stats: { totalTxns: 856, totalSpent: '28.2 L USDC', categories: ['Medicine', 'Shelter'] }
-  },
-  {
-    id: 'tn-cyclone',
-    name: 'Cyclone Michaung Response',
-    location: 'Tamil Nadu, India',
-    status: 'Closed',
-    description: 'Emergency provisions for Chennai and coastal districts.',
-    stats: { totalTxns: 3500, totalSpent: '1.2 Cr USDC', categories: ['Food', 'Medicine', 'Shelter'] }
-  },
-]
-
-const MOCK_TXNS: Txn[] = [
-  { id: 'TX-101', amount: 650, category: 'Food', store: 'Assam Relief Store #1', datetime: '12 Jun 2025, 10:12 AM', status: 'Paid' },
-  { id: 'TX-102', amount: 1200, category: 'Medicine', store: 'Northeast Pharma Verified', datetime: '11 Jun 2025, 02:45 PM', status: 'Paid' },
-  { id: 'TX-103', amount: 300, category: 'Transport', store: 'Assam Transit Hub', datetime: '10 Jun 2025, 04:05 PM', status: 'Paid' },
-  { id: 'TX-104', amount: 950, category: 'Shelter', store: 'Safe Shelter Assam', datetime: '09 Jun 2025, 11:31 AM', status: 'Paid' },
-  { id: 'TX-105', amount: 2100, category: 'Food', store: 'Guwahati Provisions', datetime: '12 Jun 2025, 11:20 AM', status: 'Paid' },
-]
-
-const MOCK_AUDIT: AuditLog[] = [
-  { action: 'Campaign Created', role: 'Admin', time: '01 Jun 2025, 09:00 AM', detail: 'Campaign structure and wallets initialized.' },
-  { action: 'Categories Locked', role: 'System', time: '01 Jun 2025, 09:05 AM', detail: 'Spending limited to: Food, Medicine, Shelter.' },
-  { action: 'Store Authorized', role: 'Admin', time: '02 Jun 2025, 11:15 AM', detail: 'Assam Relief Store #1 verified and added.' },
-  { action: 'Beneficiary Onboarded', role: 'Admin', time: '03 Jun 2025, 02:30 PM', detail: 'Batch #1 of 50 beneficiaries approved.' },
-  { action: 'Payment Executed', role: 'System', time: '12 Jun 2025, 10:12 AM', detail: 'Smart contract released 650 USDC to store.' },
-]
-
 
 export default function TransparencyPage() {
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const initialCampaignId = searchParams.get('campaign')
+
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>([])
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false)
+  const [campaignError, setCampaignError] = useState('')
+
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(initialCampaignId)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [filters, setFilters] = useState({ category: '', store: '', date: '' })
 
+  const [summary, setSummary] = useState<CampaignSummary | null>(null)
+  const [ledger, setLedger] = useState<LedgerItem[]>([])
+  const [auditLog, setAuditLog] = useState<AuditLogItem[]>([])
+  const [dataLoading, setDataLoading] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    const loadCampaigns = async () => {
+      try {
+        setLoadingCampaigns(true)
+        const res = await fetch('/api/campaigns')
+        if (!res.ok) {
+          setCampaignError('Unable to load campaigns')
+          return
+        }
+        const data = await res.json()
+        if (!mounted) return
+        const mapped: CampaignOption[] = (data || []).map((c: any) => ({
+          id: c._id,
+          name: c.name,
+          location: c.stateRegion || c.location || '',
+          status: c.status || 'Active',
+          description: c.description || ''
+        }))
+        setCampaigns(mapped)
+      } catch {
+        if (!mounted) return
+        setCampaignError('Unable to load campaigns')
+      } finally {
+        if (!mounted) return
+        setLoadingCampaigns(false)
+      }
+    }
+    loadCampaigns()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (!selectedCampaignId) {
+        setSummary(null)
+        setLedger([])
+        setAuditLog([])
+        setFilters({ category: '', store: '', date: '' })
+        return
+      }
+      setDataLoading(true)
+      setFilters({ category: '', store: '', date: '' })
+      try {
+        const [summaryRes, ledgerRes, auditRes] = await Promise.all([
+          fetch(`/api/transparency/campaign-summary?campaignId=${encodeURIComponent(selectedCampaignId)}`),
+          fetch(`/api/transparency/ledger?campaignId=${encodeURIComponent(selectedCampaignId)}`),
+          fetch(`/api/transparency/admin-log?campaignId=${encodeURIComponent(selectedCampaignId)}`)
+        ])
+
+        if (summaryRes.ok) {
+          const s = await summaryRes.json()
+          setSummary({
+            id: s.id,
+            name: s.name,
+            description: s.description,
+            status: s.status,
+            location: s.location,
+            totalTxns: s.totalTxns || 0,
+            totalSpent: s.totalSpent || 0,
+            categories: Array.isArray(s.categories) ? s.categories : [],
+            escrowAddress: s.escrowAddress,
+            chainId: s.chainId,
+            explorerBaseUrl: s.explorerBaseUrl
+          })
+        } else {
+          setSummary(null)
+        }
+
+        if (ledgerRes.ok) {
+          const l = await ledgerRes.json()
+          const items: LedgerItem[] = (l.items || []).map((p: any) => ({
+            id: p.id,
+            amount: p.amount,
+            currency: p.currency || 'USDC',
+            category: p.category || 'Unknown',
+            store: p.store || '',
+            timestamp: p.timestamp,
+            status: 'Paid',
+            txHash: p.txHash || ''
+          }))
+          setLedger(items)
+        } else {
+          setLedger([])
+        }
+
+        if (auditRes.ok) {
+          const a = await auditRes.json()
+          const logs: AuditLogItem[] = (a.items || []).map((log: any) => ({
+            action: log.action,
+            role: log.role === 'System' ? 'System' : 'Admin',
+            time: new Date(log.time).toLocaleString(),
+            detail: log.detail
+          }))
+          setAuditLog(logs)
+        } else {
+          setAuditLog([])
+        }
+      } catch {
+        setSummary(null)
+        setLedger([])
+        setAuditLog([])
+      } finally {
+        setDataLoading(false)
+      }
+    }
+    loadData()
+  }, [selectedCampaignId])
+
   const selectedCampaign = useMemo(() =>
-    CAMPAIGNS.find(c => c.id === selectedCampaignId),
-    [selectedCampaignId])
+    campaigns.find(c => c.id === selectedCampaignId) || null,
+    [campaigns, selectedCampaignId])
 
   const filteredTxns = useMemo(() => {
-    return MOCK_TXNS.filter(t => {
+    return ledger.filter(t => {
       if (filters.category && t.category !== filters.category) return false
       if (filters.store && !t.store.toLowerCase().includes(filters.store.toLowerCase())) return false
       return true
     })
-  }, [filters])
+  }, [ledger, filters])
+
+  const escrowAddress = summary?.escrowAddress || ''
+  const hasEscrowAddress = !!escrowAddress
 
   // --- Animation Variants ---
   const containerVariants = {
@@ -170,6 +263,11 @@ export default function TransparencyPage() {
           </motion.label>
           <div className="relative">
             {/* Custom Dropdown Trigger */}
+            {campaignError && (
+              <div className="mb-3 text-sm text-red-400 text-center">
+                {campaignError}
+              </div>
+            )}
             <motion.button
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
@@ -199,7 +297,7 @@ export default function TransparencyPage() {
                   className="absolute top-full left-0 right-0 bg-[#0A0A0A] border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-50"
                 >
                   <div className="p-2 space-y-1 max-h-[400px] overflow-y-auto custom-scrollbar">
-                    {CAMPAIGNS.map((c) => (
+                    {campaigns.map((c) => (
                       <motion.button
                         key={c.id}
                         whileHover={{ backgroundColor: "rgba(255, 255, 255, 0.08)", x: 5 }}
@@ -247,30 +345,6 @@ export default function TransparencyPage() {
               exit={{ opacity: 0, y: -20 }}
               className="space-y-12"
             >
-              {/* GLOBAL SNAPSHOT */}
-              <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { label: "Campaigns Audited", value: "12", icon: Shield },
-                  { label: "Verified Stores", value: "148", icon: MapPin },
-                  { label: "Transactions Logged", value: "5.2k+", icon: CheckCircle },
-                  { label: "Cash Withdrawals", value: "0", icon: Lock, highlight: true },
-                ].map((stat, i) => (
-                  <motion.div
-                    whileHover={{ y: -5, backgroundColor: "rgba(255,255,255,0.08)" }}
-                    key={i}
-                    className={`p-6 rounded-3xl border ${stat.highlight ? 'bg-accent/5 border-accent/20' : 'bg-white/5 border-white/5'} text-center backdrop-blur-sm transition-colors`}
-                  >
-                    <div className="flex justify-center mb-4">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${stat.highlight ? 'bg-accent/20 text-accent' : 'bg-white/10 text-gray-400'}`}>
-                        <stat.icon className="w-6 h-6" />
-                      </div>
-                    </div>
-                    <div className={`text-3xl font-black mb-1 ${stat.highlight ? 'text-accent' : 'text-white'}`}>{stat.value}</div>
-                    <div className="text-xs font-bold text-gray-500 uppercase tracking-wide">{stat.label}</div>
-                  </motion.div>
-                ))}
-              </motion.div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* ORIENTATION BLOCK */}
                 <motion.div variants={itemVariants} className="space-y-6">
@@ -373,32 +447,58 @@ export default function TransparencyPage() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
-                      <h2 className="text-3xl font-bold text-white">{selectedCampaign.name}</h2>
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${selectedCampaign.status === 'Active' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+                      <h2 className="text-3xl font-bold text-white">{summary?.name || selectedCampaign.name}</h2>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${(summary?.status || selectedCampaign.status) === 'Active' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
                         }`}>
-                        {selectedCampaign.status}
+                        {summary?.status || selectedCampaign.status}
                       </span>
                     </div>
-                    <p className="text-gray-400">{selectedCampaign.description}</p>
+                    <p className="text-gray-400">{summary?.description || selectedCampaign.description}</p>
+                    {hasEscrowAddress && (
+                      <div className="mt-3 flex flex-col gap-1">
+                        <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                          Escrow Contract
+                        </span>
+                        <span className="font-mono text-xs text-gray-300 break-all">
+                          {escrowAddress}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-4">
                     <div className="text-right">
                       <div className="text-sm text-gray-500 font-medium">Total Spent</div>
-                      <div className="text-2xl font-mono font-bold text-accent">{selectedCampaign.stats.totalSpent}</div>
+                      <div className="text-2xl font-mono font-bold text-accent">
+                        {summary ? `${summary.totalSpent.toLocaleString()} USDC` : '—'}
+                      </div>
                     </div>
                     <div className="w-px bg-white/10"></div>
                     <div className="text-right">
                       <div className="text-sm text-gray-500 font-medium">Transactions</div>
-                      <div className="text-2xl font-mono font-bold text-white">{selectedCampaign.stats.totalTxns}</div>
+                      <div className="text-2xl font-mono font-bold text-white">
+                        {summary ? summary.totalTxns : '—'}
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {selectedCampaign.stats.categories.map(cat => (
-                    <span key={cat} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 text-sm text-gray-300">
-                      {cat} Only
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-3 h-3 text-gray-400" />
+                    <span className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+                      Categories Allowed
                     </span>
-                  ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(summary?.categories || []).map(cat => (
+                      <span
+                        key={cat}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-200"
+                      >
+                        <CheckCircle className="w-3 h-3 text-accent" />
+                        <span>{cat}</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </section>
 
@@ -472,7 +572,7 @@ export default function TransparencyPage() {
                           className="pl-9 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none appearance-none cursor-pointer hover:bg-white/10"
                         >
                           <option value="" className="bg-dark">All Categories</option>
-                          {selectedCampaign.stats.categories.map(c => (
+                          {(summary?.categories || []).map(c => (
                             <option key={c} value={c} className="bg-dark">{c}</option>
                           ))}
                         </select>
@@ -500,12 +600,15 @@ export default function TransparencyPage() {
                           <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Verified Store</th>
                           <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Timestamp</th>
                           <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase">Status</th>
+                          <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase text-right">On-chain Proof</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {filteredTxns.map((t) => (
                           <tr key={t.id} className="hover:bg-white/5 transition-colors">
-                            <td className="px-6 py-4 font-mono font-bold text-white">{t.amount} USDC</td>
+                            <td className="px-6 py-4 font-mono font-bold text-white">
+                              {t.amount} {t.currency}
+                            </td>
                             <td className="px-6 py-4">
                               <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-xs text-gray-300">
                                 {t.category}
@@ -515,22 +618,50 @@ export default function TransparencyPage() {
                               <span>{t.store}</span>
                               <CheckCircle className="w-3 h-3 text-accent" />
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-500 font-mono">{t.datetime}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500 font-mono">
+                              {t.timestamp ? new Date(t.timestamp).toLocaleString() : ''}
+                            </td>
                             <td className="px-6 py-4">
                               <span className="text-green-400 text-xs font-bold uppercase flex items-center gap-1">
                                 <CheckCircle className="w-3 h-3" /> Paid
                               </span>
                             </td>
+                            <td className="px-6 py-4 text-right">
+                              {t.txHash
+                                ? summary?.explorerBaseUrl
+                                  ? (
+                                    <button
+                                      onClick={() =>
+                                        window.open(`${summary.explorerBaseUrl}${t.txHash}`, '_blank')
+                                      }
+                                      className="px-3 py-1 rounded-md bg-accent/10 text-accent hover:bg-accent/20 text-xs transition-colors"
+                                    >
+                                      View on Explorer
+                                    </button>
+                                    )
+                                  : (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] text-gray-300">
+                                      Local Tx (Hardhat)
+                                    </span>
+                                    )
+                                : (
+                                  <span className="text-xs text-yellow-400 font-medium">
+                                    Proof unavailable
+                                  </span>
+                                  )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    {filteredTxns.length === 0 && (
-                      <div className="p-8 text-center text-gray-500 text-sm">No transactions match your filters.</div>
+                    {!dataLoading && ledger.length === 0 && (
+                      <div className="p-8 text-center text-gray-500 text-sm">
+                        No transactions have been recorded for this campaign yet.
+                      </div>
                     )}
                   </div>
                   <div className="p-4 bg-white/5 border-t border-white/5 text-xs text-center text-gray-500">
-                    Beneficiary names are masked to protect privacy. All transactions are final.
+                    Beneficiary names are masked to protect privacy. All on-chain transactions are immutable.
                   </div>
                 </div>
               </section>
@@ -543,11 +674,11 @@ export default function TransparencyPage() {
                     <h3 className="text-sm font-bold text-purple-400 uppercase tracking-wider">Admin Accountability</h3>
                   </div>
                   <div className="space-y-4">
-                    {MOCK_AUDIT.map((log, i) => (
+                    {auditLog.map((log, i) => (
                       <div key={i} className="flex gap-4">
                         <div className="flex flex-col items-center">
                           <div className={`w-3 h-3 rounded-full ${log.role === 'System' ? 'bg-accent' : 'bg-purple-500'} ring-4 ring-black`}></div>
-                          {i !== MOCK_AUDIT.length - 1 && <div className="w-px h-full bg-white/10 my-1"></div>}
+                          {i !== auditLog.length - 1 && <div className="w-px h-full bg-white/10 my-1"></div>}
                         </div>
                         <div className="pb-6">
                           <div className="flex items-baseline gap-2 mb-1">
@@ -562,6 +693,11 @@ export default function TransparencyPage() {
                         </div>
                       </div>
                     ))}
+                    {auditLog.length === 10 && (
+                      <div className="mt-1 text-[11px] text-gray-500">
+                        Showing most recent actions
+                      </div>
+                    )}
                   </div>
                 </div>
 

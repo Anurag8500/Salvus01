@@ -34,7 +34,15 @@ export async function GET(req: Request) {
 
     const items = await InventoryItem.find({ vendorId }).sort({ createdAt: -1 })
     
-    return NextResponse.json(items, { status: 200 })
+    const safeItems = items.map(item => ({
+        _id: item._id,
+        name: item.name,
+        category: item.category,
+        unit: item.unit,
+        price: item.priceInr,
+    }))
+
+    return NextResponse.json(safeItems, { status: 200 })
   } catch (error) {
     console.error('Inventory GET Error:', error)
     return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 })

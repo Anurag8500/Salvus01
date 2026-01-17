@@ -16,13 +16,29 @@ const CampaignSchema = new mongoose.Schema(
   {
     escrowAddress: { type: String },
     fundsRaised: { type: Number, default: 0 },
-    status: { type: String }
+    status: { type: String },
+    deploymentTx: { type: String }
   },
   { strict: false }
 );
 
 const Campaign =
   mongoose.models.Campaign || mongoose.model("Campaign", CampaignSchema);
+
+const IndexerStateSchema = new mongoose.Schema(
+  {
+    escrowAddress: { type: String, required: true },
+    indexerType: { type: String, required: true },
+    lastScannedBlock: { type: Number, required: true }
+  },
+  { strict: false }
+);
+
+IndexerStateSchema.index({ escrowAddress: 1, indexerType: 1 }, { unique: true });
+
+const IndexerState =
+  mongoose.models.IndexerState ||
+  mongoose.model("IndexerState", IndexerStateSchema);
 
 /* -------------------------------------------------------------------------- */
 /*                               DB CONNECTION                                */
@@ -50,19 +66,20 @@ const CAMPAIGN_ABI = [
 /* -------------------------------------------------------------------------- */
 
 const lastScannedBlock: Record<string, number> = {};
+const isScanning: Record<string, boolean> = {};
+const watcherStarted: Record<string, boolean> = {};
+const MAX_BLOCKS = 2000;
 
 async function main() {
   await connectDB();
 
-  if (!process.env.WS_RPC_URL_AMOY) {
-    throw new Error("Missing WS_RPC_URL_AMOY in environment variables");
+  if (!process.env.WS_RPC_URL) {
+    throw new Error("Missing WS_RPC_URL in environment variables");
   }
 
-  const provider = new ethers.WebSocketProvider(process.env.WS_RPC_URL_AMOY);
+  const provider = new ethers.WebSocketProvider(process.env.WS_RPC_URL);
 
-  console.log("Donation Indexer started (Amoy, live-only)");
-
-  const watchedEscrows = new Set<string>();
+  console.log("Donation Indexer started (localhost, live-only)");
 
   setInterval(async () => {
     try {
@@ -73,16 +90,41 @@ async function main() {
 
       for (const camp of campaigns) {
         const escrow = camp.escrowAddress;
-        if (!escrow || watchedEscrows.has(escrow)) continue;
+        if (!escrow || watcherStarted[escrow]) continue;
 
-        console.log(`Watching campaign (donations): ${camp.name || "Unnamed"} (${escrow})`);
+        console.log(
+          `Watching campaign (donations): ${camp.name || "Unnamed"} (${escrow})`
+        );
+        // Persistent indexing state ensures we can resume after restarts without losing events.
+        const indexerType = "donations";
+        let state = await IndexerState.findOne({ escrowAddress: escrow, indexerType });
+        if (!state) {
+          let startBlock = 0;
+          if ((camp as any).deploymentTx) {
+            const receipt = await provider.getTransactionReceipt(
+              (camp as any).deploymentTx as string
+            );
+            if (receipt && receipt.blockNumber != null) {
+              startBlock = Math.max(0, Number(receipt.blockNumber) - 1);
+            } else {
+              const currentBlock = await provider.getBlockNumber();
+              startBlock = currentBlock;
+            }
+          } else {
+            const currentBlock = await provider.getBlockNumber();
+            startBlock = currentBlock;
+          }
+          state = await IndexerState.create({
+            escrowAddress: escrow,
+            indexerType,
+            lastScannedBlock: startBlock
+          });
+        }
 
-        // 👉 START FROM LATEST BLOCK (NO BACKFILL)
-        const latestBlock = await provider.getBlockNumber();
-        lastScannedBlock[escrow] = latestBlock;
+        lastScannedBlock[escrow] = state.lastScannedBlock;
 
         startBlockWatcher(escrow, provider);
-        watchedEscrows.add(escrow);
+        watcherStarted[escrow] = true;
       }
     } catch (err) {
       console.error("Error polling campaigns:", err);
@@ -100,15 +142,25 @@ function startBlockWatcher(
 ) {
   const contract = new ethers.Contract(escrow, CAMPAIGN_ABI, provider);
 
-  provider.on("block", async (currentBlock) => {
+  // NOTE: Polling-based block scanning is used instead of provider.on("block")
+  // because WebSocket subscriptions can silently drop in long-running processes.
+  setInterval(async () => {
+    if (isScanning[escrow]) return;
+    isScanning[escrow] = true;
+
     try {
-      const lastBlock = lastScannedBlock[escrow];
-      if (currentBlock <= lastBlock) return;
+      const lastBlock = lastScannedBlock[escrow] ?? 0;
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = lastBlock + 1;
+      const toBlock = currentBlock;
+      if (toBlock < fromBlock) return;
+
+      const effectiveToBlock = Math.min(toBlock, fromBlock + MAX_BLOCKS);
 
       const events = await contract.queryFilter(
         "Donation",
-        lastBlock + 1,
-        currentBlock
+        fromBlock,
+        effectiveToBlock
       );
 
       for (const event of events) {
@@ -122,7 +174,6 @@ function startBlockWatcher(
         const exists = await Donation.findOne({ txHash });
         if (exists) continue;
 
-        // Find user by wallet address (case-insensitive)
         const user = await (await import("../../models/User")).default.findOne({ walletAddress: donor.toLowerCase() });
         if (!user) {
           console.warn(`No user found for wallet ${donor}, skipping donation index.`);
@@ -143,15 +194,24 @@ function startBlockWatcher(
           { escrowAddress: escrow },
           { $inc: { fundsRaised: Number(amountVal) } }
         );
+        // NOTE: fundsRaised is a denormalized cache.
+        // The Donation collection remains the source of truth.
 
         console.log("Donation indexed:", txHash);
       }
 
-      lastScannedBlock[escrow] = currentBlock;
+      lastScannedBlock[escrow] = effectiveToBlock;
+      await IndexerState.findOneAndUpdate(
+        { escrowAddress: escrow, indexerType: "donations" },
+        { lastScannedBlock: effectiveToBlock },
+        { upsert: true }
+      );
     } catch (err) {
       console.error("Donation block scan error:", err);
+    } finally {
+      isScanning[escrow] = false;
     }
-  });
+  }, 3000);
 }
 
 /* -------------------------------------------------------------------------- */

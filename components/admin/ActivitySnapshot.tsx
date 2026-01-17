@@ -45,10 +45,14 @@ const SnapshotCard = ({ title, icon: Icon, items, color, link }: { title: string
                     >
                         <div className={`mt-0.5 w-1.5 h-1.5 rounded-full ${color} opacity-50 group-hover:opacity-100 transition-opacity`}></div>
                         <div className="flex-1">
-                            <div className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors line-clamp-1">{item.title}</div>
-                            <div className="flex text-xs text-gray-500 justify-between mt-0.5">
-                                <span className="line-clamp-1 max-w-[120px]">{item.subtitle}</span>
-                                <span>{item.timestamp}</span>
+                            <div className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors whitespace-normal break-words">
+                                {item.title}
+                            </div>
+                            <div className="flex text-xs text-gray-500 justify-between mt-0.5 gap-2">
+                                <span className="whitespace-normal break-words">
+                                    {item.subtitle}
+                                </span>
+                                <span className="shrink-0">{item.timestamp}</span>
                             </div>
                         </div>
                     </motion.div>
