@@ -1,8 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { DollarSign, Heart, TrendingUp, Calendar, Sparkles } from 'lucide-react'
-
+import { DollarSign, Heart, TrendingUp, Calendar, ArrowUpRight } from 'lucide-react'
 import { useEffect, useState } from 'react';
 
 export default function DonorOverview() {
@@ -11,37 +10,41 @@ export default function DonorOverview() {
       icon: DollarSign,
       label: 'Total Donated',
       value: '—',
-      color: 'text-accent',
-      bgGradient: 'from-accent/20 to-accent/5',
-      borderColor: 'border-accent/30',
-      glow: 'shadow-accent/20',
+      trend: '+12% this month',
+      bgClass: 'bg-gradient-to-br from-indigo-500/20 to-blue-600/5',
+      borderClass: 'border-indigo-500/20',
+      iconBg: 'bg-indigo-500/20 text-indigo-400',
+      pattern: 'radial-gradient(circle at top right, rgba(99, 102, 241, 0.15) 0%, transparent 40%)',
     },
     {
       icon: Heart,
       label: 'Campaigns Supported',
       value: '—',
-      color: 'text-accent-light',
-      bgGradient: 'from-accent-light/20 to-accent-light/5',
-      borderColor: 'border-accent-light/30',
-      glow: 'shadow-accent-light/20',
+      trend: 'Active Contributor',
+      bgClass: 'bg-gradient-to-br from-pink-500/20 to-rose-600/5',
+      borderClass: 'border-pink-500/20',
+      iconBg: 'bg-pink-500/20 text-pink-400',
+      pattern: 'radial-gradient(circle at top right, rgba(236, 72, 153, 0.15) 0%, transparent 40%)',
     },
     {
       icon: TrendingUp,
       label: 'Funds Utilized',
-      value: 'Coming Soon',
-      color: 'text-accent',
-      bgGradient: 'from-accent/20 to-accent/5',
-      borderColor: 'border-accent/30',
-      glow: 'shadow-accent/20',
+      value: 'Processing',
+      subtext: 'Held in Escrow',
+      bgClass: 'bg-gradient-to-br from-emerald-500/20 to-teal-600/5',
+      borderClass: 'border-emerald-500/20',
+      iconBg: 'bg-emerald-500/20 text-emerald-400',
+      pattern: 'radial-gradient(circle at top right, rgba(16, 185, 129, 0.15) 0%, transparent 40%)',
     },
     {
       icon: Calendar,
-      label: 'Last Donation Date',
+      label: 'Last Donation',
       value: '—',
-      color: 'text-accent-light',
-      bgGradient: 'from-accent-light/20 to-accent-light/5',
-      borderColor: 'border-accent-light/30',
-      glow: 'shadow-accent-light/20',
+      trend: 'Keep it up!',
+      bgClass: 'bg-gradient-to-br from-amber-500/20 to-orange-600/5',
+      borderClass: 'border-amber-500/20',
+      iconBg: 'bg-amber-500/20 text-amber-400',
+      pattern: 'radial-gradient(circle at top right, rgba(245, 158, 11, 0.15) 0%, transparent 40%)',
     },
   ]);
 
@@ -51,7 +54,6 @@ export default function DonorOverview() {
       .then(res => res.json())
       .then(data => {
         if (!mounted) return;
-        // Fetch fundsUtilized from donor-impact API
         fetch('/api/donor-impact')
           .then(res2 => res2.json())
           .then(impactData => {
@@ -66,11 +68,11 @@ export default function DonorOverview() {
               },
               {
                 ...prev[2],
-                value: impactData.fundsUtilized > 0 ? `${impactData.fundsUtilized.toLocaleString()} USDC` : 'Funds are securely held in escrow.',
+                value: impactData.fundsUtilized > 0 ? `${impactData.fundsUtilized.toLocaleString()} USDC` : '0 USDC',
               },
               {
                 ...prev[3],
-                value: data.lastDonation ? new Date(data.lastDonation).toLocaleDateString() : '—',
+                value: data.lastDonation ? new Date(data.lastDonation).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'No donations yet',
               },
             ]);
           });
@@ -85,29 +87,40 @@ export default function DonorOverview() {
         return (
           <motion.div
             key={index}
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: index * 0.1 }}
-            whileHover={{ y: -5 }}
-            className="relative glass-card rounded-2xl p-6 group overflow-hidden"
+            whileHover={{ y: -5, scale: 1.02 }}
+            className={`relative rounded-3xl p-6 overflow-hidden border backdrop-blur-md ${stat.borderClass} ${stat.bgClass} group`}
           >
-            {/* Hover Glow */}
-            <div className={`absolute inset-0 bg-gradient-to-br ${stat.bgGradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
+            {/* Background Pattern */}
+            <div className="absolute inset-0 z-0 transition-opacity duration-500 opacity-50 group-hover:opacity-100" style={{ background: stat.pattern }}></div>
 
             <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-xl bg-white/5 border border-white/10 group-hover:scale-110 transition-transform duration-300`}>
-                  <Icon className={`w-6 h-6 ${stat.color}`} />
+              <div className="flex justify-between items-start mb-4">
+                <div className={`p-3.5 rounded-2xl ${stat.iconBg} backdrop-blur-sm group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+                  <Icon className="w-6 h-6" />
+                </div>
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 -mr-2 -mt-2">
+                  <ArrowUpRight className="w-5 h-5 text-white/30" />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <div className="text-3xl font-bold text-white tracking-tight">
+                <div className="text-gray-400 font-medium text-sm tracking-wide uppercase">{stat.label}</div>
+                <div className="text-2xl xl:text-3xl font-bold text-white tracking-tight">
                   {stat.value}
                 </div>
-                <div className="text-sm font-medium text-gray-400">
-                  {stat.label}
-                </div>
+                {stat.trend && (
+                  <div className="text-xs font-medium text-gray-400 group-hover:text-white/80 transition-colors pt-2 border-t border-white/5 mt-3 flex items-center gap-1">
+                    {stat.trend}
+                  </div>
+                )}
+                {stat.subtext && (
+                  <div className="text-xs font-medium text-gray-400 group-hover:text-white/80 transition-colors pt-2 border-t border-white/5 mt-3">
+                    {stat.subtext}
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -116,3 +129,4 @@ export default function DonorOverview() {
     </div>
   )
 }
+

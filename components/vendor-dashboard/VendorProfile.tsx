@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Mail, Phone, User, Store, Tag, ShieldCheck, Wallet, Calendar, FileText, AlertCircle } from 'lucide-react';
+import { MapPin, Mail, Phone, User, Store, Tag, ShieldCheck, Wallet, Calendar, FileText, AlertCircle, Copy } from 'lucide-react';
 
 interface VendorProfileProps {
   vendor: {
@@ -26,34 +26,36 @@ interface VendorProfileProps {
 const VendorProfile: React.FC<VendorProfileProps> = ({ vendor }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Verified': return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20';
-      case 'Pending': return 'text-amber-400 bg-amber-400/10 border-amber-400/20';
-      case 'Suspended': return 'text-red-400 bg-red-400/10 border-red-400/20';
-      default: return 'text-gray-400 bg-gray-400/10 border-gray-400/20';
+      case 'Verified': return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+      case 'Pending': return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+      case 'Suspended': return 'text-red-400 bg-red-500/10 border-red-500/20';
+      default: return 'text-gray-400 bg-gray-500/10 border-gray-500/20';
     }
   };
 
   return (
-    <div className="glass-card rounded-2xl p-6 h-full relative overflow-hidden flex flex-col">
+    <div className="bg-[#111] border border-white/5 rounded-3xl p-8 h-full relative overflow-hidden flex flex-col group hover:border-white/10 transition-colors duration-300">
       {/* Decorative background elements */}
-      <div className="absolute top-0 right-0 w-80 h-80 bg-accent/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+      <div className="absolute top-0 right-0 w-64 h-64 bg-accent/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none transition-all duration-700 group-hover:bg-accent/10"></div>
 
       <div className="relative z-10 flex flex-col h-full">
         {/* Header */}
-        <div className="flex items-start justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 flex items-center justify-center shadow-lg shrink-0">
-              <Store className="w-7 h-7 text-accent" />
+        <div className="flex items-start justify-between mb-8">
+          <div className="flex items-center gap-5">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0d0d0d] border border-white/10 flex items-center justify-center shadow-lg shrink-0">
+              <Store className="w-8 h-8 text-accent" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white leading-tight">{vendor.storeName}</h2>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border ${getStatusColor(vendor.status)}`}>
+              <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mb-1">Merchant Profile</p>
+              <h2 className="text-xl font-bold text-white leading-tight mb-2">{vendor.storeName}</h2>
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-1 rounded text-[10px] uppercase font-bold tracking-wider border flex items-center gap-1.5 ${getStatusColor(vendor.status)}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${vendor.status === 'Verified' ? 'bg-emerald-400' : 'bg-gray-400'}`}></div>
                   {vendor.status}
                 </span>
                 {vendor.verified && (
-                  <span className="flex items-center gap-1 text-[10px] text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded border border-blue-400/20">
-                    <ShieldCheck className="w-3 h-3" /> Verified
+                  <span className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded border border-blue-500/20">
+                    <ShieldCheck className="w-3 h-3" /> KYC VERIFIED
                   </span>
                 )}
               </div>
@@ -61,17 +63,17 @@ const VendorProfile: React.FC<VendorProfileProps> = ({ vendor }) => {
           </div>
         </div>
 
-        <div className="space-y-6 flex-grow overflow-y-auto pr-1 custom-scrollbar">
+        <div className="space-y-8 flex-grow overflow-y-auto pr-2 custom-scrollbar">
 
           {/* Key Info Grid */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Store ID</p>
-              <p className="text-xs font-mono text-gray-300 truncate" title={vendor.id}>{vendor.id}</p>
+            <div className="p-4 rounded-2xl bg-[#0A0A0A] border border-white/5">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 font-bold">Store ID</p>
+              <p className="text-xs font-mono text-gray-300 truncate opacity-80" title={vendor.id}>{vendor.id}</p>
             </div>
-            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Joined</p>
-              <div className="flex items-center gap-1.5">
+            <div className="p-4 rounded-2xl bg-[#0A0A0A] border border-white/5">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 font-bold">Joined On</p>
+              <div className="flex items-center gap-2">
                 <Calendar className="w-3 h-3 text-gray-400" />
                 <p className="text-xs text-gray-300">{vendor.joinDate}</p>
               </div>
@@ -80,29 +82,35 @@ const VendorProfile: React.FC<VendorProfileProps> = ({ vendor }) => {
 
           {/* Contact Details */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-              <User className="w-3 h-3" /> Contact Information
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <User className="w-3.5 h-3.5 text-accent" /> Contact Information
             </h3>
-            <div className="space-y-2">
-              <div className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
-                <User className="w-4 h-4 text-gray-400" />
+            <div className="space-y-3">
+              <div className="group/item flex items-center gap-4 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-transparent hover:border-white/5">
+                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 group-hover/item:text-white transition-colors">
+                  <User className="w-4 h-4" />
+                </div>
                 <div className="overflow-hidden">
-                  <p className="text-[10px] text-gray-500">Contact Person</p>
-                  <p className="text-sm text-gray-200 truncate">{vendor.contactPerson}</p>
+                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Manager</p>
+                  <p className="text-sm font-medium text-gray-200 truncate">{vendor.contactPerson}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
-                <Phone className="w-4 h-4 text-gray-400" />
+              <div className="group/item flex items-center gap-4 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-transparent hover:border-white/5">
+                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 group-hover/item:text-white transition-colors">
+                  <Phone className="w-4 h-4" />
+                </div>
                 <div className="overflow-hidden">
-                  <p className="text-[10px] text-gray-500">Phone</p>
-                  <p className="text-sm text-gray-200 font-mono">{vendor.phone}</p>
+                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Phone</p>
+                  <p className="text-sm font-medium text-gray-200 font-mono">{vendor.phone}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
-                <Mail className="w-4 h-4 text-gray-400" />
+              <div className="group/item flex items-center gap-4 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-transparent hover:border-white/5">
+                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 group-hover/item:text-white transition-colors">
+                  <Mail className="w-4 h-4" />
+                </div>
                 <div className="overflow-hidden">
-                  <p className="text-[10px] text-gray-500">Email</p>
-                  <p className="text-sm text-gray-200 truncate" title={vendor.email}>{vendor.email}</p>
+                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Email</p>
+                  <p className="text-sm font-medium text-gray-200 truncate" title={vendor.email}>{vendor.email}</p>
                 </div>
               </div>
             </div>
@@ -110,42 +118,46 @@ const VendorProfile: React.FC<VendorProfileProps> = ({ vendor }) => {
 
           {/* Location */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-              <MapPin className="w-3 h-3" /> Location
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <MapPin className="w-3.5 h-3.5 text-accent" /> Location
             </h3>
-            <div className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
-              <MapPin className="w-4 h-4 text-accent mt-0.5 shrink-0" />
+            <div className="flex items-start gap-4 p-4 rounded-2xl bg-[#0A0A0A] border border-white/5">
+              <MapPin className="w-5 h-5 text-gray-500 mt-1 shrink-0" />
               <div>
-                <p className="text-sm font-medium text-gray-200">{vendor.area}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{vendor.district}, {vendor.state}</p>
+                <p className="text-sm font-medium text-white">{vendor.area}</p>
+                <p className="text-xs text-gray-400 mt-1">{vendor.district}, {vendor.state}</p>
               </div>
             </div>
           </div>
 
-          {/* Compliance & Wallet */}
+          {/* Wallet */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-              <ShieldCheck className="w-3 h-3" /> Compliance & Finance
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Wallet className="w-3.5 h-3.5 text-accent" /> Settlement Wallet
             </h3>
             <div className="space-y-2">
-              {vendor.walletAddress && (
-                <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/10">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Wallet className="w-3.5 h-3.5 text-purple-400" />
-                    <span className="text-xs text-purple-300 font-medium">Wallet Connected</span>
+              {vendor.walletAddress ? (
+                <div className="p-4 rounded-2xl bg-purple-500/5 border border-purple-500/10 group/wallet hover:bg-purple-500/10 transition-colors">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></div>
+                    <span className="text-xs text-purple-300 font-bold uppercase tracking-wide">Connected</span>
                   </div>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-[10px] font-mono text-purple-200 break-all leading-relaxed">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-mono text-purple-200/80 break-all leading-relaxed">
                       {vendor.walletAddress}
                     </p>
                     <button
                       onClick={() => navigator.clipboard.writeText(vendor.walletAddress)}
-                      className="p-1.5 hover:bg-purple-400/20 rounded-md transition-colors shrink-0 mt-[-2px]"
+                      className="p-2 hover:bg-purple-400/20 rounded-lg transition-colors shrink-0 text-purple-300"
                       title="Copy Address"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-300"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                      <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-white/5 text-center text-gray-400 text-xs">
+                  No wallet linked.
                 </div>
               )}
             </div>
@@ -153,14 +165,14 @@ const VendorProfile: React.FC<VendorProfileProps> = ({ vendor }) => {
 
           {/* Categories */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-              <Tag className="w-3 h-3" /> Authorized Categories
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Tag className="w-3.5 h-3.5 text-accent" /> Authorized Categories
             </h3>
             <div className="flex flex-wrap gap-2">
               {vendor.allowedCategories.map((category) => (
                 <span
                   key={category}
-                  className="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 text-[11px] font-medium text-gray-300"
+                  className="px-3 py-1.5 rounded-lg bg-[#0A0A0A] border border-white/10 text-[11px] font-medium text-gray-300 hover:border-accent/30 transition-colors cursor-default"
                 >
                   {category}
                 </span>
